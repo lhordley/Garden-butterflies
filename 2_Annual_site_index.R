@@ -36,8 +36,8 @@ ts_date <- rbms::ts_dwmy_table(InitYear = 2016, LastYear = 2021, WeekDay1 = 'mon
 # also define resolution of time series (weekly or daily, timeunit='w' or 'd')
 # anchor argument adds zeros before and after monitoring season
 
-ts_season <- rbms::ts_monit_season(ts_date, StartMonth = 4, EndMonth = 10, StartDay = 15, EndDay = 15, 
-                                   CompltSeason = TRUE, Anchor = TRUE, AnchorLength = 2, AnchorLag = 0, TimeUnit = 'd')
+ts_season <- rbms::ts_monit_season(ts_date, StartMonth = 1, EndMonth = 12, StartDay = 1, EndDay = 31, 
+                                   CompltSeason = TRUE, Anchor = FALSE, TimeUnit = 'd') # ts date and ts season same length
 
 # Now add site visits to the time series
 ts_season_visit <- rbms::ts_monit_site(ts_season, gbs_count)
@@ -47,28 +47,28 @@ species <- unique(gbs_data$common_name)
 sindex_final <- NULL
 pheno_final <- NULL
 annual_indices <- NULL
-
-for(i in species) {
+options(warn=2)
+for(i in species[1:10]) {
 print(i)
-  ts_season_count <- rbms::ts_monit_count_site(ts_season_visit, gbs_count, sp = i)
+  ts_season_count <- rbms::ts_monit_count_site(ts_season_visit, gbs_count, sp = "Common Blue")
   ts_flight_curve <- rbms::flight_curve(ts_season_count, NbrSample = 100, MinVisit = 4, MinOccur = 2, 
                                         MinNbrSite = 5, MaxTrial = 3, GamFamily = 'poisson', SpeedGam = FALSE, 
-                                        CompltSeason = TRUE, SelectYear = NULL, TimeUnit = 'd')
+                                        CompltSeason = TRUE, SelectYear = 2019, TimeUnit = 'd')
   
   # extract pheno object: contains the shape of annual flight curves, standardised to sum 1
   pheno <- ts_flight_curve$pheno
   pheno$sp <- i
   pheno_final <- rbind(pheno, pheno_final, fill=TRUE)
   
-  temp <- ggplot(pheno, aes(x=trimDAYNO, y=NM, colour=M_YEAR))+
-    geom_line()+
-    labs(x="Monitoring Day", y="Relative Abundance", colour="")+
-    ggtitle(i)+
-    scale_x_continuous(breaks=seq(0,366, by=50)) +
-    theme_classic()+
-    theme(title = element_text(size = 14), legend.text=element_text(size=12),axis.text=element_text(size=12))
-  ggsave(temp, file=paste0("../Graphs/Species flight curves/Flight_curve_anchor_", i,".png"), width = 20, height = 15, units = "cm")
-  Sys.sleep(2)
+  # temp <- ggplot(pheno, aes(x=trimDAYNO, y=NM, colour=M_YEAR))+
+  #   geom_line()+
+  #   labs(x="Monitoring Day", y="Relative Abundance", colour="")+
+  #   ggtitle(i)+
+  #   scale_x_continuous(breaks=seq(0,366, by=50)) +
+  #   theme_classic()+
+  #   theme(title = element_text(size = 14), legend.text=element_text(size=12),axis.text=element_text(size=12))
+  # ggsave(temp, file=paste0("../Graphs/Species flight curves/Flight_curve_", i,".png"), width = 20, height = 15, units = "cm")
+  # Sys.sleep(2)
   
   # extract site index for each site, year and species
   # impute_count() function uses the count data generated from ts_season_count() function and the flight curves
@@ -115,34 +115,61 @@ print(i)
 
 
 }
-# Can't estimate flight curves for 22 species: left with 30 
+# Can't estimate flight curves for Small Blue - left with 30 species
+options(op)
 
-length(unique(sindex_final$SPECIES)) # 31 species
-length(unique(annual_indices$sp)) # 31 species
-length(unique(pheno_final$sp)) # 52 species
+length(unique(sindex_final$SPECIES)) # 30 species
+length(unique(annual_indices$sp)) # 30 species
+length(unique(pheno_final$sp)) # 31 species
 
 sindex_final <- merge(sindex_final, site_match, by="SITE_ID", all.x=TRUE)
-write.csv(sindex_final, file="../Data/Site_index_GBS_daily_anchor.csv", row.names=FALSE)
-write.csv(annual_indices, file="../Data/Annual_collated_index_daily_anchor.csv", row.names=FALSE)
-write.csv(pheno_final, file="../Data/Flight_curves_daily_anchor.csv", row.names=FALSE)
+write.csv(sindex_final, file="../Data/Site_index_GBS_daily.csv", row.names=FALSE)
+write.csv(annual_indices, file="../Data/Annual_collated_index_daily.csv", row.names=FALSE)
+saveRDS(pheno_final, file="../Data/Flight_curves_daily.rds")
 
+# plot anchor vs no anchor flight curves
+pheno_anchor <- read.csv("../Data/Flight_curves_daily_anchor.csv", header=TRUE)
+pheno_noanchor <- read.csv("../Data/Flight_curves_daily_no_anchor.csv", header=TRUE)
 
+pheno_anchor$anchor <- "anchor"
+pheno_noanchor$anchor <- "no_anchor"
+
+pheno <- rbind(pheno_anchor, pheno_noanchor)
+pheno$M_YEAR <- as.factor(pheno$M_YEAR)
+
+sp <- unique(pheno$SPECIES)
+
+for(i in sp){
+  print(i)
+
+flight <- ggplot(pheno[pheno$SPECIES==i,], aes(x=trimDAYNO, y=NM, colour=M_YEAR))+
+  geom_line()+
+  labs(x="Monitoring Day", y="Relative Abundance", colour="")+
+  ggtitle(i)+
+  scale_x_continuous(breaks=seq(0,366, by=50)) +
+  facet_grid(rows = vars(anchor))+
+  theme_classic()+
+  theme(title = element_text(size = 14), legend.text=element_text(size=12),axis.text=element_text(size=12))
+  
+  ggsave(flight, file=paste0("../Graphs/Species flight curves/Anchor comparison/Flight_curve_", i,".png"), width = 20, height = 15, units = "cm")
+  Sys.sleep(2)
+}
 
 sindex <- read.csv("../Data/Site_index_GBS.csv", header=TRUE)
-annual_indices <- read.csv("../Data/Annual_collated_index.csv", header=TRUE)
+annual_indices <- read.csv("../Data/Annual_collated_index_daily.csv", header=TRUE)
 # read in UKBMS collated indices and check similarity
-ukbms_indices <- read.csv("../Data/ukbmscollatedindices2020.csv", header=TRUE)
+ukbms_indices <- read.csv("../Data/GB_GAI_collated_indices_1976-2021.csv", header=TRUE)
 
 ukbms_indices$data <- "UKBMS"
 annual_indices$data <- "GBS"
 species <- unique(annual_indices$sp)
 
 ukbms_indices <- ukbms_indices[ukbms_indices$YEAR>=2016,]
-ukbms_indices <- ukbms_indices[ukbms_indices$COUNTRY=="UK",]
 
-ukbms_indices <- ukbms_indices[,c(2,4,6,10)]
+ukbms_indices <- ukbms_indices[,c("COMMON_NAME","YEAR","TRMOBS","data")]
 colnames(ukbms_indices) <- c("sp", "M_YEAR", "LCI", "data")
 ukbms_indices <- ukbms_indices[which(ukbms_indices$sp %in% species), ]
+annual_indices <- annual_indices[,c("sp","M_YEAR","LCI","data")]
 
 all_indices <- rbind(ukbms_indices, annual_indices)
 
@@ -159,7 +186,109 @@ for(i in species){print(i)
     theme(title = element_text(size = 14), legend.text=element_text(size=12),axis.text=element_text(size=12))
   ggsave(temp_plot, file=paste0("../Graphs/Species collated indices/Collated_index_comparison_", i,".png"), width = 20, height = 15, units = "cm")
   Sys.sleep(2)
-  }
+}
+
+
+
+## Put flight curves and comparison collated index plot in same pdf 
+
+library(ggplot2)
+library(gridExtra)
+
+annual_indices <- read.csv("../Data/Annual_collated_index_daily.csv", header=TRUE)
+# read in UKBMS collated indices and check similarity
+ukbms_indices <- read.csv("../Data/GB_GAI_collated_indices_1976-2021.csv", header=TRUE)
+
+ukbms_indices$data <- "UKBMS"
+annual_indices$data <- "GBS"
+species <- unique(annual_indices$sp)
+
+ukbms_indices <- ukbms_indices[ukbms_indices$YEAR>=2016,]
+
+ukbms_indices <- ukbms_indices[,c("COMMON_NAME","YEAR","TRMOBS","data")]
+colnames(ukbms_indices) <- c("sp", "M_YEAR", "LCI", "data")
+ukbms_indices <- ukbms_indices[which(ukbms_indices$sp %in% species), ]
+annual_indices <- annual_indices[,c("sp","M_YEAR","LCI","data")]
+
+all_indices <- rbind(ukbms_indices, annual_indices)
+all_indices <- all_indices[!all_indices$sp=="Small Blue",]
+
+
+pheno <- readRDS("../Data/Flight_curves_daily.rds")
+pheno <- pheno[!pheno$SPECIES=="Small Blue",] # can't estimate flight curve
+sp<-unique(pheno$SPECIES)
+
+# also remove Dark Green Fritillary - can only estimate filght curve in 2020
+# White-letter Hairstreak
+# Brown Hairstreak
+
+pdf('../Graphs/Flight_curves_collated_indices.pdf', height = 8, width = 6, onefile=TRUE)
+for (i in sp) {
+  print(i)
+  flight_curve <- ggplot(pheno[pheno$SPECIES==i,], aes(x=trimDAYNO, y=NM, colour=M_YEAR))+
+    geom_line()+
+    labs(x="Monitoring Day", y="Relative Abundance", colour="")+
+    ggtitle(i)+
+    scale_x_continuous(breaks=seq(0,366, by=50)) +
+    theme_classic()+
+    theme(title = element_text(size = 14), legend.text=element_text(size=12),axis.text=element_text(size=12))
+  
+  collated_index <- ggplot(all_indices[all_indices$sp==i,], aes(x=M_YEAR, y=LCI, colour=data))+
+    geom_point()+
+    geom_line()+
+    geom_hline(yintercept=2, linetype='dotted', col = 'black')+
+    labs(x="Year", y=expression('log '['(10)']*' Collated Index'))+
+    theme_classic()+
+    theme(title = element_text(size = 14), legend.text=element_text(size=12),axis.text=element_text(size=12))
+  
+  grid.arrange(flight_curve, collated_index)
+}
+dev.off()
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 ## add the line of the first year
 yr <- unique(pheno[order(M_YEAR), as.numeric(as.character(M_YEAR))])
 
