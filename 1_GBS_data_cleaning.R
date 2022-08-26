@@ -3,8 +3,6 @@
 #### date: July 2022
 #### info: Cleaning & exploring GBS data for analysis
 
-rm(list = ls())
-
 # load packages
 library(data.table)
 library(tidyverse)
@@ -332,24 +330,6 @@ gbs_filter_final <- merge(gbs_data, test2, by=c("grid_reference", "year"), all.y
 # this filters the right sites and years in - but keeps ALL dates that those sites have been visited in those years that meet the criteria
 length(unique(gbs_filter_final$grid_reference)) # 823
 
-# now calculate the min and max date for each filtered site, each site 
-# as some will have been visited outwith our mid-April and mid-October season
-max_min_dates <- gbs_filter_final %>% 
-  group_by(grid_reference, year) %>%
-  # transform to date format with lubridate
-  mutate(date = ymd(date)) %>% 
-  # find min and max
-  summarise(min = min(date),
-            max = max(date))
-
-# get date into right format
-gbs_filter_final$date <- as.Date(gbs_filter_final$date)
-gbs_filter_final$day_month<-format(gbs_filter_final$date, format="%m-%d")
-# now keep visits after 14/04 and before 16/10
-# this makes sure we remove visits outwith mid-April and mid-October
-# but keep other visits between those dates
-gbs_filter_final <- subset(gbs_filter_final, day_month> "04-14" & day_month < "10-16")
-length(unique(gbs_filter_final$grid_reference)) # 823
 check <- gbs_filter_final %>% group_by(grid_reference, year) %>% summarise(n_dates=n_distinct(date)) # just to show each site has a minimum of 4 visits
 gbs_filter_final$day_month <- NULL
 gbs_filter_final <- gbs_filter_final[,c(1,3:9,2,10:18)]
