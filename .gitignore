@@ -19,3 +19,7 @@
 *.nc
 *.pptx
 *.JPG
+*.pdf
+dir_to_ignore/Data
+dir_to_ignore/Graphs
+dir_to_ignore/QGIS
