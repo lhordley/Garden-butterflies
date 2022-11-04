@@ -1,2 +1,0 @@
-# GardenButterflies
-GBS analysis
