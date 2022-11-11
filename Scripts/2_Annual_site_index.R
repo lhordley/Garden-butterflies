@@ -10,7 +10,7 @@ library(dplyr)
 library(ggplot2)
 
 # load cleaned data
-gbs_data <- read.csv("../Data/GBS_2016_2021_cleaned_filtered.csv", header=TRUE)
+gbs_data <- read.csv("Data/GBS_2016_2021_cleaned_filtered.csv", header=TRUE)
 
 # Get data into right format for rbms
 # create two files: gbs_count and gbs_visit
@@ -47,10 +47,10 @@ species <- unique(gbs_data$common_name)
 sindex_final <- NULL
 pheno_final <- NULL
 annual_indices <- NULL
-options(warn=2)
-for(i in species[1:10]) {
+#options(warn=2)
+for(i in species) {
 print(i)
-  ts_season_count <- rbms::ts_monit_count_site(ts_season_visit, gbs_count, sp = "Common Blue")
+  ts_season_count <- rbms::ts_monit_count_site(ts_season_visit, gbs_count, sp = i)
   ts_flight_curve <- rbms::flight_curve(ts_season_count, NbrSample = 100, MinVisit = 4, MinOccur = 2, 
                                         MinNbrSite = 5, MaxTrial = 3, GamFamily = 'poisson', SpeedGam = FALSE, 
                                         CompltSeason = TRUE, SelectYear = 2019, TimeUnit = 'd')
@@ -155,7 +155,7 @@ flight <- ggplot(pheno[pheno$SPECIES==i,], aes(x=trimDAYNO, y=NM, colour=M_YEAR)
   Sys.sleep(2)
 }
 
-sindex <- read.csv("../Data/Site_index_GBS.csv", header=TRUE)
+sindex <- read.csv("Data/Site_index_GBS.csv", header=TRUE)
 annual_indices <- read.csv("../Data/Annual_collated_index_daily.csv", header=TRUE)
 # read in UKBMS collated indices and check similarity
 ukbms_indices <- read.csv("../Data/GB_GAI_collated_indices_1976-2021.csv", header=TRUE)

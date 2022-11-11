@@ -227,7 +227,7 @@ ggsave(nspp, file="../Graphs/Summaries/N_species_2016_2021.png")
   # At least one count between mid-September and mid-October
 # ALL COUNTS MUST BE AT LEAST 10 DAYS APART FOLLOWING THE WCBS GUIDELINES # 
 
-gbs_data <- read.csv("../Data/GBS_2016_2021_cleaned.csv", header=TRUE)
+gbs_data <- read.csv("Data/GBS_2016_2021_cleaned.csv", header=TRUE)
 
 # subset by columns needed for filter
 gbs2 <- gbs_data[,c("grid_reference","date","year"),]
@@ -360,7 +360,7 @@ write.csv(gbs_filter_final, file="../Data/GBS_2016_2021_cleaned_filtered.csv", r
 ## Some more plots using filtered data
 rm(list = ls())
 
-gbs_data <- read.csv("../Data/GBS_2016_2021_cleaned_filtered.csv", header=TRUE)
+gbs_data <- read.csv("Data/GBS_2016_2021_cleaned_filtered.csv", header=TRUE)
 # Number of records for each species - each year and total
 
 sp_summ_year <- gbs_data %>% group_by(species, year) %>% summarise(n_records=n())
