@@ -13,7 +13,7 @@ library(rnrfa)
 library(store)
 
 # read in data
-gbs_data <- read.csv("Data/GBS_2016_2021_cleaned.csv", header=TRUE)
+gbs_data <- read.csv("Data/Raw GBS data/GBS_2016_2021_cleaned.csv", header=TRUE)
 
 
 # Filter the data to ensure gardens have been sampled throughout the year
@@ -117,7 +117,7 @@ filtered_sites <- ggplot() +
   theme_void() +
   theme(title = element_text(size = 12))
 filtered_sites
-ggsave(filtered_sites, file="../Graphs/Summaries/Filtered_GBS_sites_2016_2021.png")
+ggsave(filtered_sites, file="../Graphs/Filtered_GBS_sites_2016_2021.png")
 # not bad coverage 
 
 # filter back into gbs data
@@ -136,7 +136,7 @@ gbs_filter_final <- gbs_filter_final[,c(1,3:9,2,10:18)]
 ###########
 
 # Remove species that are recorded in less than 1% of ALL sites (use cleaned data, but not filtered)
-gbs_raw <- read.csv("../Data/GBS_2016_2021_cleaned.csv", header=TRUE)
+gbs_raw <- read.csv("../Data/Raw GBS data/GBS_2016_2021_cleaned.csv", header=TRUE)
 
 # number of sites each species has been recorded at across years
 species_sites <- gbs_raw %>% group_by(common_name, species) %>% summarise(n_sites=n_distinct(grid_reference))
@@ -150,5 +150,5 @@ gbs_filter_final <- gbs_filter_final[gbs_filter_final$common_name %in% new_speci
 length(unique(gbs_filter_final$common_name)) # 31
 length(unique(gbs_filter_final$grid_reference)) # 823
 
-write.csv(gbs_filter_final, file="../Data/GBS_2016_2021_cleaned_filtered.csv", row.names=FALSE)
+write.csv(gbs_filter_final, file="../Data/Raw GBS data/GBS_2016_2021_cleaned_filtered.csv", row.names=FALSE)
 

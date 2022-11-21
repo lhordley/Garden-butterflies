@@ -20,7 +20,7 @@ library(store)
 # devtools::install_github("gcfrench/store")
 
 # read in data
-gbs_data <- read.csv("../Data/GBS_raw_2016_2021.csv", header=TRUE)
+gbs_data <- read.csv("../Data/Raw GBS data/GBS_raw_2016_2021.csv", header=TRUE)
 
 # extract info from date
 gbs_data$date <- dmy(gbs_data$date)
@@ -123,7 +123,7 @@ gbs_data2$id <- NULL
 gbs_data2$location <- NULL
 gbs_data2 <- gbs_data2[,c(2,14:17,3,13,12,11,18,1,4,5:10)]
 # save file
-write.csv(gbs_data2, file="../Data/GBS_2016_2021_cleaned.csv", row.names=FALSE)
+write.csv(gbs_data2, file="../Data/Raw GBS data/GBS_2016_2021_cleaned.csv", row.names=FALSE)
   
 # ## extract points from SX99 hectad - Exeter - to match with OSMM data in QGIS
 # exeter <- grid_references[grid_references$hectad=="SX99",]
