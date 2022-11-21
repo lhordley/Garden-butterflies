@@ -10,7 +10,7 @@ library(dplyr)
 library(ggplot2)
 
 # load cleaned data
-gbs_data <- read.csv("Data/GBS_2016_2021_cleaned_filtered.csv", header=TRUE)
+gbs_data <- read.csv("Data/Raw GBS data/GBS_2016_2021_cleaned_filtered.csv", header=TRUE)
 # DAILY ANCHOR ARE CORRECT FILES
 
 # Get data into right format for rbms
@@ -95,7 +95,25 @@ print(i)
 
 }
 # Can't estimate flight curves for Small Blue - left with 30 species
-options(op)
+
+for(i in species) {
+  sindex_temp <- sindex_final[sindex_final$SPECIES==i,]
+  co_index <- collated_index(data = sindex_temp, s_sp = i, sindex_value = "SINDEX", glm_weights = TRUE, rm_zero = TRUE)
+  co_index <- co_index$col_index
+  # NSITE_OBS is number of sites that the species has been recorded at - assume all these are used to calculate collated index
+  # NSITE is the number of sites (total) for that year
+  # transform index to a log(10) scale
+  co_index_b <- co_index[COL_INDEX > 0.0001 & COL_INDEX < 100000, ]
+  co_index_logInd <- co_index_b[BOOTi == 0, .(M_YEAR, COL_INDEX)][, log(COL_INDEX)/log(10), by = M_YEAR][, mean_logInd := mean(V1)]
+  data.table::setnames(co_index_logInd, "V1", "logInd"); setkey(co_index_logInd, M_YEAR); setkey(co_index_b, M_YEAR)
+  co_index_b <- merge(co_index_b, co_index_logInd, all.x = TRUE)
+  b1 <- data.table(M_YEAR = co_index_b$M_YEAR, LCI = 2 + co_index_b$logInd - co_index_b$mean_logInd)
+  b1 <- merge(b1, co_index, by="M_YEAR")
+  b1$sp <- i
+  annual_indices <- rbind(b1, annual_indices) # this is the annual collated index across all sites
+  
+}
+
 
 # This produces 3 files:
 # 1. Pheno_final = each species' flight curves based on GBS data with anchors on 1st + 2nd Jan and 30th + 31st Dec
@@ -106,107 +124,44 @@ length(unique(sindex_final$SPECIES)) # 30 species
 length(unique(annual_indices$sp)) # 30 species
 length(unique(pheno_final$sp)) # 31 species
 
-sindex_final <- merge(sindex_final, site_match, by="SITE_ID", all.x=TRUE) # add grid references back in
-# save each file
-write.csv(sindex_final, file="Data/Site_index_GBS_daily.csv", row.names=FALSE)
-write.csv(annual_indices, file="Data/Annual_collated_index_daily.csv", row.names=FALSE)
-saveRDS(pheno_final, file="Data/Flight_curves_daily.rds")
+# save flight curves for all 31 species 
+saveRDS(pheno_final, file="Data/Abundance data/Flight_curves_GBS_daily_anchor.rds")
 
+# Which species don't have a flight curve estimated for each year? 
+# Can still estimate an abundance index for these species, but it uses a flight curve from a different year
+# Plot the flight curves to see which species to exclude:
 
-################ Put this into new script! 
-annual_indices <- read.csv("Data/Annual_collated_index_daily.csv", header=TRUE)
-# read in UKBMS collated indices and check similarity
-ukbms_indices <- read.csv("Data/GB_GAI_collated_indices_1976-2021.csv", header=TRUE)
-
-ukbms_indices$data <- "UKBMS"
-annual_indices$data <- "GBS"
-species <- "Brimstone"
-
-ukbms_indices <- ukbms_indices[ukbms_indices$YEAR>=2016,]
-
-ukbms_indices <- ukbms_indices[,c("COMMON_NAME","YEAR","TRMOBS","data")]
-ukbms_indices2 <- ukbms_indices %>% group_by(COMMON_NAME) %>% summarise(TRMOBS=TRMOBS-mean(TRMOBS)+2)
-ukbms_indices2$YEAR <- ukbms_indices$YEAR
-ukbms_indices2$data <- "UKBMS"
-colnames(ukbms_indices2) <- c("sp", "LCI", "M_YEAR", "data")
-ukbms_indices <- ukbms_indices[which(ukbms_indices$sp %in% species), ]
-annual_indices <- annual_indices[,c("sp","M_YEAR","LCI","data")]
-
-all_indices <- rbind(ukbms_indices2, annual_indices)
-
-
-for(i in species){print(i)
-  
-  temp_plot <- ggplot(all_indices[all_indices$sp==i,], aes(x=M_YEAR, y=LCI, colour=data))+
-    geom_point()+
-    geom_line()+
-    geom_hline(yintercept=2, linetype='dotted', col = 'black')+
-    ggtitle(i)+
-    labs(x="Year", y=expression('log '['(10)']*' Collated Index'))+
-    theme_classic()+
-    theme(title = element_text(size = 14), legend.text=element_text(size=12),axis.text=element_text(size=12))
-  #ggsave(temp_plot, file=paste0("../Graphs/Species collated indices/Collated_index_comparison_", i,".png"), width = 20, height = 15, units = "cm")
-  Sys.sleep(2)
-}
-
-
-
-## Put flight curves and comparison collated index plot in same pdf 
-
-library(ggplot2)
-library(gridExtra)
-
-annual_indices <- read.csv("../Data/Annual_collated_index_daily.csv", header=TRUE)
-# read in UKBMS collated indices and check similarity
-ukbms_indices <- read.csv("../Data/GB_GAI_collated_indices_1976-2021.csv", header=TRUE)
-
-ukbms_indices$data <- "UKBMS"
-annual_indices$data <- "GBS"
-species <- unique(annual_indices$sp)
-
-ukbms_indices <- ukbms_indices[ukbms_indices$YEAR>=2016,]
-
-ukbms_indices <- ukbms_indices[,c("COMMON_NAME","YEAR","TRMOBS","data")]
-colnames(ukbms_indices) <- c("sp", "M_YEAR", "LCI", "data")
-ukbms_indices <- ukbms_indices[which(ukbms_indices$sp %in% species), ]
-annual_indices <- annual_indices[,c("sp","M_YEAR","LCI","data")]
-
-all_indices <- rbind(ukbms_indices, annual_indices)
-all_indices <- all_indices[!all_indices$sp=="Small Blue",]
-
-
-pheno <- readRDS("../Data/Flight_curves_daily.rds")
-pheno <- pheno[!pheno$SPECIES=="Small Blue",] # can't estimate flight curve
-sp<-unique(pheno$SPECIES)
-
-# also remove Dark Green Fritillary - can only estimate filght curve in 2020
-# White-letter Hairstreak
-# Brown Hairstreak
-
-pdf('../Graphs/Flight_curves_collated_indices.pdf', height = 8, width = 6, onefile=TRUE)
-for (i in sp) {
+for (i in unique(pheno_final$SPECIES)) {
   print(i)
-  flight_curve <- ggplot(pheno[pheno$SPECIES==i,], aes(x=trimDAYNO, y=NM, colour=M_YEAR))+
+  flight_curve <- ggplot(na.omit(pheno_final[pheno_final$SPECIES==i,]), aes(x=trimDAYNO, y=NM, colour=M_YEAR))+
     geom_line()+
     labs(x="Monitoring Day", y="Relative Abundance", colour="")+
     ggtitle(i)+
-    scale_x_continuous(breaks=seq(0,366, by=50)) +
+    #scale_x_continuous(breaks=seq(0,366, by=50)) +
     theme_classic()+
     theme(title = element_text(size = 14), legend.text=element_text(size=12),axis.text=element_text(size=12))
   
-  collated_index <- ggplot(all_indices[all_indices$sp==i,], aes(x=M_YEAR, y=LCI, colour=data))+
-    geom_point()+
-    geom_line()+
-    geom_hline(yintercept=2, linetype='dotted', col = 'black')+
-    labs(x="Year", y=expression('log '['(10)']*' Collated Index'))+
-    theme_classic()+
-    theme(title = element_text(size = 14), legend.text=element_text(size=12),axis.text=element_text(size=12))
-  
-  grid.arrange(flight_curve, collated_index)
+  ggsave(flight_curve, file=paste0("Graphs/Species flight curves/Flight_curve_", i,".png"), width = 20, height = 15, units = "cm")
+  Sys.sleep(2)
 }
-dev.off()
 
+# Also create a way of doing this using pheno_final? Then filter based on that
+# filter by length of M_YEAR - species need to have at least 6 years (2016-2021)
+flight_curve_years <- pheno_final %>% na.omit() %>% group_by(SPECIES) %>% summarise(n_years=n_distinct(M_YEAR))
+# 7 species do not have enough data to estimate a flight curve for each year
+# Remove these species from sindex_final and annual_indices
+sp_exclude <- subset(flight_curve_years, n_years<6, select=SPECIES)
+sindex_final <- sindex_final[!sindex_final$SPECIES %in% sp_exclude$SPECIES,]
+length(unique(sindex_final$SPECIES)) # 23 species
+# add grid references back in
+sindex_final <- merge(sindex_final, site_match, by="SITE_ID", all.x=TRUE) 
+# remove zeros where a species was not observed at a site
+sindex_final <- sindex_final[!sindex_final$SINDEX==0,]
+# save site index file = abundance values for 23 species at 823 sites from 2016-2021
+write.csv(sindex_final, file="Data/Abundance data/Site_index_GBS_daily.csv", row.names=FALSE)
 
-
-
+# Exclude species from annual indices
+annual_indices <- annual_indices[!annual_indices$sp %in% sp_exclude$SPECIES,]
+length(unique(annual_indices$sp)) # 23
+write.csv(annual_indices, file="Data/Abundance data/Annual_collated_index_daily.csv", row.names=FALSE)
 
