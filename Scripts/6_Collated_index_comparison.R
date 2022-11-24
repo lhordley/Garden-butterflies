@@ -103,3 +103,19 @@ AGR_plot <- ggplot(annual_gr2, aes(x=UKBMS, y=GBS))+
 AGR_plot
 # save file
 ggsave(AGR_plot, file="Graphs/UKBMS_GBS_AGR_comparison.png")
+
+# Correlate each species too and see how many are significantly correlated between UKBMS and GBS
+cor_all_sp_results <- NULL
+for(i in species){
+  print(i)
+  sp_annual_gr <- annual_gr2[annual_gr2$sp==i,]
+  cor_result <- cor.test(sp_annual_gr$UKBMS, sp_annual_gr$GBS)
+  p_value <- cor_result$p.value
+  r_value <- cor_result$estimate
+  cor_results <- data.frame(species=i, p_value=p_value, r_value=r_value)
+  cor_all_sp_results <- rbind(cor_results, cor_all_sp_results)
+}
+# 13 out of 23 with significant correlations (56.5%)
+# 20 species have >0.7 correlation coefficient
+
+
