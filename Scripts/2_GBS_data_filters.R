@@ -136,13 +136,14 @@ gbs_filter_final <- gbs_filter_final[,c(1,3:9,2,10:18)]
 ###########
 
 # Remove species that are recorded in less than 1% of ALL sites (use cleaned data, but not filtered)
-gbs_raw <- read.csv("../Data/Raw GBS data/GBS_2016_2021_cleaned.csv", header=TRUE)
+gbs_raw <- read.csv("Data/Raw GBS data/GBS_2016_2021_cleaned.csv", header=TRUE)
 
 # number of sites each species has been recorded at across years
+# and the percentage compared to total GBS sites (ALL sites, not just the subset we're analysing)
 species_sites <- gbs_raw %>% group_by(common_name, species) %>% summarise(n_sites=n_distinct(grid_reference))
-species_sites$total_sites <- length(unique(gbs_raw$grid_reference))
+species_sites$total_sites <- length(unique(gbs_raw$grid_reference)) # 4627 sites
 species_sites$percentage <- (species_sites$n_sites/species_sites$total_sites)*100
-write.csv(species_sites, file="../Data/GBS_species_sites.csv", row.names=FALSE)
+write.csv(species_sites, file="Data/Raw GBS data/GBS_species_sites.csv", row.names=FALSE)
 # this will remove 26 species
 species_sites <- species_sites[species_sites$percentage>=1,] # from 57 to 31 species
 new_species <- species_sites$common_name
@@ -150,5 +151,5 @@ gbs_filter_final <- gbs_filter_final[gbs_filter_final$common_name %in% new_speci
 length(unique(gbs_filter_final$common_name)) # 31
 length(unique(gbs_filter_final$grid_reference)) # 823
 
-write.csv(gbs_filter_final, file="../Data/Raw GBS data/GBS_2016_2021_cleaned_filtered.csv", row.names=FALSE)
+write.csv(gbs_filter_final, file="Data/Raw GBS data/GBS_2016_2021_cleaned_filtered.csv", row.names=FALSE)
 

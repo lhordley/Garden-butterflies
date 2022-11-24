@@ -14,23 +14,23 @@ library(rgdal)
 library(geosphere)
 options(scipen=999)
 
-gbs_data <- read.csv("../Data/GBS_2016_2021_cleaned_filtered.csv", header=TRUE)
-gbs_raw <-read.csv("../Data/GBS_2016_2021_cleaned.csv", header=TRUE)
-
-# number of sites each species has been recorded at across years
-species_sites <- gbs_raw %>% group_by(common_name, species) %>% summarise(n_sites=n_distinct(grid_reference))
-species_sites$total_sites <- length(unique(gbs_raw$grid_reference))
-species_sites$percentage <- (species_sites$n_sites/species_sites$total_sites)*100
-write.csv(species_sites, file="../Data/GBS_species_sites.csv", row.names=FALSE)
-
-gbs_sites <- unique(gbs_data[,c("grid_reference", "year", "species", "lon", "lat")]) 
-gbs_raw <- unique(gbs_raw[,c("grid_reference", "species", "lon", "lat")])
-# removes day/month info - only need to know which species were recorded at each site in each year
-# for gbs_raw we don't need to know any time info - regional richness is based on entire time period
+gbs_data <- read.csv("Data/Raw GBS data/GBS_2016_2021_cleaned_filtered.csv", header=TRUE)
+gbs_raw <-read.csv("Data/Raw GBS data/GBS_2016_2021_cleaned.csv", header=TRUE)
 
 # generate site vector
-filtered_sites <- unique(gbs_data$grid_reference) # these are the cleaned final sites, n=740
-year <- unique(gbs_sites$year)
+filtered_sites <- unique(gbs_data$grid_reference) # these are the cleaned final sites, n=823
+year <- unique(gbs_sites$year) # 6 years
+
+##############
+## Method 1 ##
+##############
+
+# Relative species richness is the proportion of species within a focal site compared to the 
+# regional species richness in the sites within 100km of the focal site
+
+# Concern was that isolated sites wouldn't have enough regional sites to represent regional richness
+# Tested different distances to ensure regional richness was represented by at least 10 sites
+# This distance is 140km 
 
 relative_SR <- NULL
 for (x in filtered_sites){  print(x)
@@ -73,13 +73,19 @@ for (x in filtered_sites){  print(x)
 relative_SR$site_rel_SR <- as.numeric(relative_SR$site_rel_SR)
 relative_SR$no_reg_sites <- as.numeric(relative_SR$no_reg_sites)
 
-#### Try again but take the closest 100 sites and also export the maximum latitude difference
+##############
+## Method 2 ##
+##############
+
+# Relative species richness is the proportion of species within a focal site compared to the 
+# regional species richness in 100 closest sites to the focal site
+# Also export the maximum latitude to make sure we aren't pulling sites from too far away from focal site
 
 # generate site vector
-filtered_sites <- unique(gbs_data$grid_reference) # these are the cleaned final sites, n=740
+filtered_sites <- unique(gbs_data$grid_reference) # these are the cleaned final sites, n=823
 year <- unique(gbs_data$year)
 relative_SR2 <- NULL
-for (x in filtered_sites){ # take each good hectad
+for (x in filtered_sites){ # take each focal site
   print(x)
   for(i in year){print(i)
     # subset data by site and year of interest
@@ -136,33 +142,42 @@ hist(relative_SR$no_reg_sites) # this is very varied up to ~1500 sites, quite a 
 # as it's still able to capture regional richness
 
 
-# calculate species richness in each 100km square and plot this on a map 
-# just out of interest to see how much it does vary over space
 
-gbs_data$myriad <- substr(gbs_data$grid_reference, start = 1, stop = 2)
-gbs_raw$myriad <- substr(gbs_raw$grid_reference, start = 1, stop = 2)
+## Final decision: use the first method with a 140km buffer to calculate regional richness
+colnames(relative_SR) <- c("grid_reference", "year", "site_SR", "reg_SR", "site_rel_SR", "no_reg_sites")
+length(unique(relative_SR$grid_reference)) # 823
+# save file
+write.csv(relative_SR, file="Data/Richness data/Relative_SR_GBS.csv", row.names=FALSE)
+#
 
-myriad_richness <- gbs_data %>% group_by(myriad) %>% mutate(nspp=n_distinct(species))
-myriad_richness <- unique(myriad_richness[,c("myriad","nspp")])
-myriad_richness2 <- gbs_raw %>% group_by(myriad) %>% mutate(nspp=n_distinct(species))
-myriad_richness2 <- unique(myriad_richness2[,c("myriad","nspp")])
 
-grid_refs <- myriad_richness2$myriad
-# try lat/lon again
-lon_lat <- as.data.frame(osg_parse(grid_refs=grid_refs, coord_system = "WGS84"))
-myriad_richness2 <- cbind(myriad_richness2, lon_lat)
-
-worldmap = map_data('world')
-myriad_richness <- ggplot() + 
-  geom_polygon(data = worldmap, 
-               aes(x = long, y = lat, group = group), 
-               fill = 'gray90', color = 'black') + 
-  coord_fixed(ratio = 1.3, xlim = c(-10,3), ylim = c(50, 59)) + 
-  geom_point(data = myriad_richness2, 
-             aes(x = as.numeric(lon), 
-                 y = as.numeric(lat), colour=nspp), size=12, shape=15) + 
-  scale_color_viridis_c(name="Species richness") + 
-  theme_void() +
-  theme(title = element_text(size = 12))
-myriad_richness
+# # calculate species richness in each 100km square and plot this on a map 
+# # just out of interest to see how much it does vary over space
+# 
+# gbs_data$myriad <- substr(gbs_data$grid_reference, start = 1, stop = 2)
+# gbs_raw$myriad <- substr(gbs_raw$grid_reference, start = 1, stop = 2)
+# 
+# myriad_richness <- gbs_data %>% group_by(myriad) %>% mutate(nspp=n_distinct(species))
+# myriad_richness <- unique(myriad_richness[,c("myriad","nspp")])
+# myriad_richness2 <- gbs_raw %>% group_by(myriad) %>% mutate(nspp=n_distinct(species))
+# myriad_richness2 <- unique(myriad_richness2[,c("myriad","nspp")])
+# 
+# grid_refs <- myriad_richness2$myriad
+# # try lat/lon again
+# lon_lat <- as.data.frame(osg_parse(grid_refs=grid_refs, coord_system = "WGS84"))
+# myriad_richness2 <- cbind(myriad_richness2, lon_lat)
+# 
+# worldmap = map_data('world')
+# myriad_richness <- ggplot() + 
+#   geom_polygon(data = worldmap, 
+#                aes(x = long, y = lat, group = group), 
+#                fill = 'gray90', color = 'black') + 
+#   coord_fixed(ratio = 1.3, xlim = c(-10,3), ylim = c(50, 59)) + 
+#   geom_point(data = myriad_richness2, 
+#              aes(x = as.numeric(lon), 
+#                  y = as.numeric(lat), colour=nspp), size=12, shape=15) + 
+#   scale_color_viridis_c(name="Species richness") + 
+#   theme_void() +
+#   theme(title = element_text(size = 12))
+# myriad_richness
 

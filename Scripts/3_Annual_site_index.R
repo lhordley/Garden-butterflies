@@ -46,14 +46,12 @@ ts_season_visit <- rbms::ts_monit_site(ts_season, gbs_count)
 
 # create loop to calculate and plot flight curve, and calculate sindex and plot annual indices for each species, each year
 species <- unique(gbs_data$common_name) # 31 species
-sindex_final <- NULL
 pheno_final <- NULL
-annual_indices <- NULL
 #options(warn=2)
 for(i in species) {
 print(i)
   ts_season_count <- rbms::ts_monit_count_site(ts_season_visit, gbs_count, sp = i)
-  ts_flight_curve <- rbms::flight_curve(ts_season_count, NbrSample = 100, MinVisit = 4, MinOccur = 2, 
+  ts_flight_curve <- rbms::flight_curve(ts_season_count, NbrSample = 300, MinVisit = 4, MinOccur = 2, 
                                         MinNbrSite = 5, MaxTrial = 3, GamFamily = 'poisson', SpeedGam = FALSE, 
                                         CompltSeason = TRUE, SelectYear = NULL, TimeUnit = 'd')
   
@@ -61,71 +59,70 @@ print(i)
   pheno <- ts_flight_curve$pheno
   pheno$sp <- i
   pheno_final <- rbind(pheno, pheno_final, fill=TRUE)
-  
-  # extract site index for each site, year and species
-  # impute_count() function uses the count data generated from ts_season_count() function and the flight curves
-  # it looks for the phenology available to estimate and input missing values
-  # imputation are made on a daily basis
-
-  impt_counts <- rbms::impute_count(ts_season_count=ts_season_count, ts_flight_curve=pheno, YearLimit= NULL, TimeUnit='d')
-
-  # this produces a data.table with original counts and imputed counts over the monitoring season, total count per site and year,
-  # and total proportion of flight curve covered by the visits and SINDEX = sum of both observed and imputed counts over sampling season
-
-  # From the imputed count, the site index can be calculated for each site, or with a filter that will only keep sites that have
-  # been monitored at least a certain proportion of the flight curve
-
-  sindex_temp <- rbms::site_index(butterfly_count = impt_counts, MinFC = 0.10) # only keep sites that have been monitored for 10% of flight curve
-  sindex_final <- rbind(sindex_temp, sindex_final) # this is the annual abundance indices for each site
-
-  # extract annual collated index and plot to compare against UKBMS trends
-  co_index <- collated_index(data = sindex_temp, s_sp = i, sindex_value = "SINDEX", glm_weights = TRUE, rm_zero = TRUE)
-  co_index <- co_index$col_index
-  # NSITE_OBS is number of sites that the species has been recorded at - assume all these are used to calculate collated index
-  # NSITE is the number of sites (total) for that year
-  # transform index to a log(10) scale
-  co_index_b <- co_index[COL_INDEX > 0.0001 & COL_INDEX < 100000, ]
-  co_index_logInd <- co_index_b[BOOTi == 0, .(M_YEAR, COL_INDEX)][, log(COL_INDEX)/log(10), by = M_YEAR][, mean_logInd := mean(V1)]
-  data.table::setnames(co_index_logInd, "V1", "logInd"); setkey(co_index_logInd, M_YEAR); setkey(co_index_b, M_YEAR)
-  co_index_b <- merge(co_index_b, co_index_logInd, all.x = TRUE)
-  b1 <- data.table(M_YEAR = co_index_b$M_YEAR, LCI = 2 + co_index_b$logInd - co_index_b$mean_logInd)
-  b1 <- merge(b1, co_index, by="M_YEAR")
-  b1$sp <- i
-  annual_indices <- rbind(b1, annual_indices) # this is the annual collated index across all sites
-
 }
 # Can't estimate flight curves for Small Blue - left with 30 species
 
+# This produces pheno_final = each species' flight curves based on GBS data with anchors on 1st + 2nd Jan and 30th + 31st Dec
+length(unique(pheno_final$sp)) # 31 species (Small blue is just NAs or zeros)
+# save flight curves for all 31 species 
+saveRDS(pheno_final, file="Data/Abundance data/Flight_curves_GBS_daily_anchor.rds")
+end_time <- Sys.time() # takes ~ 7 hours to calculate flight curves
+
+###################################################
+# 2. From flight curve to site and collated indices
+###################################################
+
+# pheno_final <- readRDS("Data/Abundance data/Flight_curves_GBS_daily_anchor.rds")
+# Make sure to create ts_season_visit before running this section
+
+species <- unique(gbs_data$common_name) # 31 species
+sindex_final <- NULL
+annual_indices <- NULL
+#options(warn=2)
 for(i in species) {
-  sindex_temp <- sindex_final[sindex_final$SPECIES==i,]
-  co_index <- collated_index(data = sindex_temp, s_sp = i, sindex_value = "SINDEX", glm_weights = TRUE, rm_zero = TRUE)
-  co_index <- co_index$col_index
-  # NSITE_OBS is number of sites that the species has been recorded at - assume all these are used to calculate collated index
-  # NSITE is the number of sites (total) for that year
-  # transform index to a log(10) scale
-  co_index_b <- co_index[COL_INDEX > 0.0001 & COL_INDEX < 100000, ]
-  co_index_logInd <- co_index_b[BOOTi == 0, .(M_YEAR, COL_INDEX)][, log(COL_INDEX)/log(10), by = M_YEAR][, mean_logInd := mean(V1)]
-  data.table::setnames(co_index_logInd, "V1", "logInd"); setkey(co_index_logInd, M_YEAR); setkey(co_index_b, M_YEAR)
-  co_index_b <- merge(co_index_b, co_index_logInd, all.x = TRUE)
-  b1 <- data.table(M_YEAR = co_index_b$M_YEAR, LCI = 2 + co_index_b$logInd - co_index_b$mean_logInd)
-  b1 <- merge(b1, co_index, by="M_YEAR")
-  b1$sp <- i
-  annual_indices <- rbind(b1, annual_indices) # this is the annual collated index across all sites
+  print(i)
   
+# extract site index for each site, year and species
+# impute_count() function uses the count data generated from ts_season_count() function and the flight curves
+# it looks for the phenology available to estimate and input missing values
+# imputation are made on a daily basis
+ts_season_count <- rbms::ts_monit_count_site(ts_season_visit, gbs_count, sp = i)
+impt_counts <- rbms::impute_count(ts_season_count=ts_season_count, ts_flight_curve=pheno, YearLimit= NULL, TimeUnit='d')
+
+# this produces a data.table with original counts and imputed counts over the monitoring season, total count per site and year,
+# and total proportion of flight curve covered by the visits and SINDEX = sum of both observed and imputed counts over sampling season
+
+# From the imputed count, the site index can be calculated for each site, or with a filter that will only keep sites that have
+# been monitored at least a certain proportion of the flight curve
+
+sindex_temp <- rbms::site_index(butterfly_count = impt_counts, MinFC = 0.10) # only keep sites that have been monitored for 10% of flight curve
+sindex_final <- rbind(sindex_temp, sindex_final) # this is the annual abundance indices for each site
+
+# extract annual collated index and plot to compare against UKBMS trends
+co_index <- collated_index(data = sindex_temp, s_sp = i, sindex_value = "SINDEX", glm_weights = TRUE, rm_zero = TRUE)
+co_index <- co_index$col_index
+# NSITE_OBS is number of sites that the species has been recorded at - assume all these are used to calculate collated index
+# NSITE is the number of sites (total) for that year
+# transform index to a log(10) scale
+co_index_b <- co_index[COL_INDEX > 0.0001 & COL_INDEX < 100000, ]
+co_index_logInd <- co_index_b[BOOTi == 0, .(M_YEAR, COL_INDEX)][, log(COL_INDEX)/log(10), by = M_YEAR][, mean_logInd := mean(V1)]
+data.table::setnames(co_index_logInd, "V1", "logInd"); setkey(co_index_logInd, M_YEAR); setkey(co_index_b, M_YEAR)
+co_index_b <- merge(co_index_b, co_index_logInd, all.x = TRUE)
+b1 <- data.table(M_YEAR = co_index_b$M_YEAR, LCI = 2 + co_index_b$logInd - co_index_b$mean_logInd)
+b1 <- merge(b1, co_index, by="M_YEAR")
+b1$sp <- i
+annual_indices <- rbind(b1, annual_indices) # this is the annual collated index across all sites
+
 }
 
-
-# This produces 3 files:
-# 1. Pheno_final = each species' flight curves based on GBS data with anchors on 1st + 2nd Jan and 30th + 31st Dec
-# 2. Sindex_final = annual abundance index for each site across all 30 species based on raw counts and imputed values from flight curve
-# 3. Annual_indices = annual collated index across all sites and species
+# This produces 2 files:
+# 1. Sindex_final = annual abundance index for each site across all 30 species based on raw counts and imputed values from flight curve
+# 2. Annual_indices = annual collated index across all sites and species
 
 length(unique(sindex_final$SPECIES)) # 30 species
 length(unique(annual_indices$sp)) # 30 species
-length(unique(pheno_final$sp)) # 31 species
 
-# save flight curves for all 31 species 
-saveRDS(pheno_final, file="Data/Abundance data/Flight_curves_GBS_daily_anchor.rds")
+annual_indices2 <- read.csv("Data/Abundance data/Annual_collated_index_daily.csv", header=TRUE)
 
 # Which species don't have a flight curve estimated for each year? 
 # Can still estimate an abundance index for these species, but it uses a flight curve from a different year
