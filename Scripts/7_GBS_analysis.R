@@ -166,13 +166,45 @@ garden_features_final <- garden_features3 %>%
   mutate(across(c(garden_direction, garden_hard_surface, garden_ivy, garden_long_grass, garden_size), ~ na_if(., 0)))
 garden_features_final <- garden_features_final %>% mutate(garden_long_grass_area = replace(garden_long_grass_area, 
                          which(garden_long_grass_area<0), NA))
+length(unique(garden_features_final$grid_reference)) # 810
+## Take maximum value across duplicates of hard surface, area of long grass and take the yes of ivy if duplicated (which is the minimum)
+garden_features_final$date <- NULL
+garden_features_final2 <- garden_features_final %>% group_by(grid_reference, year) %>% summarise(garden_long_grass_area=max(garden_long_grass_area),
+                                                                                           garden_hard_surface=max(garden_hard_surface),
+                                                                                           garden_ivy=min(garden_ivy),
+                                                                                           garden_long_grass=min(garden_long_grass), across())
+garden_features_final2 <- unique(garden_features_final2)
+length(unique(garden_features_final2$grid_reference)) # 810
+duplicated_sites <- garden_features_final2 %>%
+  group_by(grid_reference, year) %>% 
+  filter(n() > 1) %>%
+  ungroup() 
+# still some duplications in garden_long_grass - sites that had 0 long grass area and 2 for long grass (no) but this changed
+# to a positive value for area and 1 (yes) within the same year
+# solve this by taking the min of garden long grass to change them to 1 (yes) 
+# We've already taken the maximum value of area so it needs to match up with a 1 
+# Duplicated_sites is now zero after this change
 
+summary(garden_features_final2)
+library(rnrfa)
+east_north <- as.data.frame(osg_parse(grid_refs=garden_features_final2$grid_reference))
+garden_features_final2 <- cbind(garden_features_final2, east_north)
+lon_lat <- as.data.frame(osg_parse(grid_refs=garden_features_final2$grid_reference, coord_system = "WGS84"))
+garden_features_final2 <- cbind(garden_features_final2, lon_lat)
 
+ggplot(garden_features_final2, aes(easting, northing))+
+  geom_point()+coord_fixed()
 
+london_gardens <- garden_features_final2[garden_features_final2$lat >= 51 & garden_features_final2$lat <= 52 &
+                                           garden_features_final2$lon >= -0.9 & garden_features_final2$lon <= 0.5,]
 
-
-
-
+library(ggmap)
+lats<-c(51,52)
+lons<-c(-0.9,0.5)
+bb<-make_bbox(lon=lons,lat=lats,f=0.05)
+cda<-get_map(bb,source="osm")
+london_map <- ggmap(cda)+geom_point(data=london_gardens, aes(x=lon, y=lat), color="red", size=2, alpha=0.5)
+london_map
 
 
 
