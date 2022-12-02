@@ -10,10 +10,6 @@ library(dplyr)
 
 # load data
 garden_features <- read.csv("Data/Raw GBS data/GBS_2016_2021_cleaned_filtered.csv", header=TRUE)
-gbs_data <- read.csv("Data/Raw GBS data/GBS_raw_2016_2021.csv", header=TRUE)
-gbs_abund <- read.csv("Data/Abundance data/Site_index_GBS_daily.csv", header=TRUE)
-gbs_richness <- read.csv("Data/Richness data/Relative_SR_GBS.csv", header=TRUE)
-gbs_landscape <- read.csv("Data/Landscape data/Land_cover_GBS_100m.csv", header=TRUE)
 
 ## Abundance
 # put garden features and landscape parameters into same dataframe
@@ -22,8 +18,8 @@ garden_features <- garden_features[,c("grid_reference", "date", "year", "garden_
                                       "garden_size")]
 # this takes the unique of the above rows MINUS date - this should = 823 but its 891
 garden_features2 <- garden_features[!duplicated(garden_features[,c("grid_reference", "garden_direction", "garden_hard_surface",
-                                                                "garden_ivy", "garden_long_grass", "garden_long_grass_area",
-                                                                "garden_size")]),]
+                                                                   "garden_ivy", "garden_long_grass", "garden_long_grass_area",
+                                                                   "garden_size")]),]
 # issues with gardens within the same year have different features
 # not so much of an issue with e.g. area of long grass as could change through the year - take the mean?
 # but it's an issue where gardens have different sizes within one year
@@ -110,7 +106,7 @@ length(unique(garden_features2$grid_reference)) # 812
 
 # Checks to make on the remaining data:
 
-# 1. Which gardens have zeros in the columns? This is only possible for area of long grass
+# 1. Which gardens have zeros in the columns? This is only possible for area of long grass (only if long grass == 2)
 colSums(garden_features2==0)
 # 24 in garden direction
 # 8 in hard surface
@@ -132,32 +128,47 @@ garden_features3 <- garden_features2[!rowSums(garden_features2[, 4:7,9]) == 0,] 
 # make sure when I merge again, merge with year too
 
 # 2. Do Y/N for long grass and area all match up? 
-check <- garden_features3[,c("grid_reference", "garden_long_grass", "garden_long_grass_area")]
+check <- garden_features3[,c("grid_reference", "year", "garden_long_grass", "garden_long_grass_area")]
+# These grid refs have said no long grass, but have put a positive value for area
 # NH562225
 # SN656896 
 # SO791457
 # SP2574077407
 # SU4037990084
-# TQ121959 (negative value of area)
-# SJ9213172288 (negative value of area)
-# SU174653 (negative value of area)
-# SS825128 (negative value of area)
-# SX817557 (negative value of area)
+
+# These gridrefs have negative values of area
+# TQ121959 
+# SJ9213172288 
+# SU174653 
+# SS825128 
+# SX817557 
+
+# These grdirefs have said yes to long grass, but have put a zero value in for area
+# 12 gardens - these should get NAs in both columns because the long grass data is implausible, but they have usable data for 
+# other features
+
+# These gridrefs have zeros in long grass, so will be convered to NA below (they have data for other features)
+# SP986078
+# ST515753
+# SZ799969
+# TL037084
+
+
 
 # 3. Does area of long grass and garden size match up?
 
 # Garden size 1 category is correct (all long grass <50)
-# Garden size 2 category:
-  # TQ121959 negative long grass area
-  # NJ9209908413 long grass area is 300
-# Garden size 3 category:
-  # SS825128 negative long grass area
-  # SJ9213172288 negative long grass area
-  # TM253564 long grass area is 600
-  # TG075067 long grass area is 3000
-# Garden size 4 category: 
-  # SX817557 negative long grass area
-  # SU174653 negative long grass area
+# Garden size 2 category (50-100):
+# TQ121959 negative long grass area
+# NJ9209908413 long grass area is 300
+# Garden size 3 category (100-450):
+# SS825128 negative long grass area
+# SJ9213172288 negative long grass area
+# TM253564 long grass area is 600
+# TG075067 long grass area is 3000
+# Garden size 4 category (>450): 
+# SX817557 negative long grass area
+# SU174653 negative long grass area
 
 
 # Negative values in long grass area and zeros in all other columns get NAs
@@ -165,25 +176,42 @@ check <- garden_features3[,c("grid_reference", "garden_long_grass", "garden_long
 garden_features_final <- garden_features3 %>% 
   mutate(across(c(garden_direction, garden_hard_surface, garden_ivy, garden_long_grass, garden_size), ~ na_if(., 0)))
 garden_features_final <- garden_features_final %>% mutate(garden_long_grass_area = replace(garden_long_grass_area, 
-                         which(garden_long_grass_area<0), NA))
+                                                                                           which(garden_long_grass_area<0), NA))
 length(unique(garden_features_final$grid_reference)) # 810
+
+# Put NAs where garden long grass == 2 and area is a positive value
+garden_features_final$garden_long_grass <- ifelse(garden_features_final$garden_long_grass==2 & garden_features_final$garden_long_grass_area>0, NA,
+                                                  garden_features_final$garden_long_grass)
+garden_features_final$garden_long_grass_area <- ifelse(garden_features_final$garden_long_grass==2 & garden_features_final$garden_long_grass_area>0, NA,
+                                                  garden_features_final$garden_long_grass_area)
+
+# Put NAs where garden long grass == 1 and area is zero
+garden_features_final$garden_long_grass <- ifelse(garden_features_final$garden_long_grass==1 & garden_features_final$garden_long_grass_area==0, NA,
+                                                  garden_features_final$garden_long_grass)
+garden_features_final$garden_long_grass_area <- ifelse(garden_features_final$garden_long_grass==1 & garden_features_final$garden_long_grass_area==0, NA,
+                                                       garden_features_final$garden_long_grass_area)
+
+
 ## Take maximum value across duplicates of hard surface, area of long grass and take the yes of ivy if duplicated (which is the minimum)
 garden_features_final$date <- NULL
 garden_features_final2 <- garden_features_final %>% group_by(grid_reference, year) %>% summarise(garden_long_grass_area=max(garden_long_grass_area),
-                                                                                           garden_hard_surface=max(garden_hard_surface),
-                                                                                           garden_ivy=min(garden_ivy),
-                                                                                           garden_long_grass=min(garden_long_grass), across())
+                                                                                                 garden_hard_surface=max(garden_hard_surface),
+                                                                                                 garden_ivy=min(garden_ivy),
+                                                                                                 garden_long_grass=min(garden_long_grass), across())
 garden_features_final2 <- unique(garden_features_final2)
 length(unique(garden_features_final2$grid_reference)) # 810
 duplicated_sites <- garden_features_final2 %>%
   group_by(grid_reference, year) %>% 
   filter(n() > 1) %>%
-  ungroup() 
+  ungroup()  
 # still some duplications in garden_long_grass - sites that had 0 long grass area and 2 for long grass (no) but this changed
 # to a positive value for area and 1 (yes) within the same year
 # solve this by taking the min of garden long grass to change them to 1 (yes) 
 # We've already taken the maximum value of area so it needs to match up with a 1 
 # Duplicated_sites is now zero after this change
+
+# Still issues with gardens that have said yes to long grass (1) but zero in area (nothing to do with duplications)
+
 
 summary(garden_features_final2)
 library(rnrfa)
@@ -195,62 +223,5 @@ garden_features_final2 <- cbind(garden_features_final2, lon_lat)
 ggplot(garden_features_final2, aes(easting, northing))+
   geom_point()+coord_fixed()
 
-london_gardens <- garden_features_final2[garden_features_final2$lat >= 51 & garden_features_final2$lat <= 52 &
-                                           garden_features_final2$lon >= -0.9 & garden_features_final2$lon <= 0.5,]
-
-library(ggmap)
-lats<-c(51,52)
-lons<-c(-0.9,0.5)
-bb<-make_bbox(lon=lons,lat=lats,f=0.05)
-cda<-get_map(bb,source="osm")
-london_map <- ggmap(cda)+geom_point(data=london_gardens, aes(x=lon, y=lat), color="red", size=2, alpha=0.5)
-london_map
-
-
-
-
-
-
-
-
-
-
-
-
-
-##### Landscape and abundance
-gbs_landscape[,3:24] <- sapply(gbs_landscape[,3:24],as.numeric)
-
-gbs_abund_land <- merge(gbs_abund, gbs_landscape, by.x="grid_reference", by.y="site")
-plot(gbs_abund_land$area.Urban, gbs_abund_land$SINDEX) # possible negative relationship
-plot(gbs_abund_land$area.Suburban, gbs_abund_land$SINDEX) # possible negative relationship too
-
-plot(gbs_abund_land$area.Broadleaf.woodland, gbs_abund_land$SINDEX) # positive
-plot(gbs_abund_land$area.Arable.and.horticulture, gbs_abund_land$SINDEX) # positive
-plot(gbs_abund_land$area.Improved.grassland, gbs_abund_land$SINDEX) # positive
-
-library(lme4)
-library(lmerTest)
-mod <- lmer(log(SINDEX) ~ area.Suburban + (1|M_YEAR), data=gbs_abund_land)
-summary(mod)
-
-hist(resid(mod)) # log skewed is normally distributed
-qqnorm(resid(mod))
-qqline(resid(mod))
-
-##### Landscape and richness
-gbs_rich_land <- merge(gbs_richness, gbs_landscape, by.x="grid_reference", by.y="site")
-plot(gbs_rich_land$area.Urban, gbs_rich_land$site_rel_SR) # possible negative relationship
-plot(gbs_rich_land$area.Suburban, gbs_rich_land$site_rel_SR) # possible negative relationship too
-
-plot(gbs_rich_land$area.Broadleaf.woodland, gbs_rich_land$site_rel_SR) # positive
-plot(gbs_rich_land$area.Arable.and.horticulture, gbs_rich_land$site_rel_SR) # positive
-plot(gbs_rich_land$area.Improved.grassland, gbs_rich_land$site_rel_SR) # positive
-
-mod <- lmer(site_rel_SR ~ area.Improved.grassland + (1|year), data=gbs_rich_land)
-summary(mod)
-
-hist(resid(mod)) # looks good
-qqnorm(resid(mod))
-qqline(resid(mod))
-
+## save garden features
+write.csv(garden_features_final2, file="Data/Raw GBS data/GBS_garden_features_cleaned.csv", row.names=FALSE)
