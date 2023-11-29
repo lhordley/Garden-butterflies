@@ -11,24 +11,30 @@ library(dplyr)
 # load data
 garden_features <- read.csv("Data/Raw GBS data/GBS_2016_2021_cleaned_filtered.csv", header=TRUE)
 
-## Abundance
-# put garden features and landscape parameters into same dataframe
-garden_features <- garden_features[,c("grid_reference", "date", "year", "garden_direction", "garden_hard_surface",
+# extract garden features only
+garden_features <- garden_features[,c("grid_reference", "date", "year", "garden_direction",
                                       "garden_ivy", "garden_long_grass", "garden_long_grass_area",
                                       "garden_size")]
-# this takes the unique of the above rows MINUS date - this should = 823 but its 891
-garden_features2 <- garden_features[!duplicated(garden_features[,c("grid_reference", "garden_direction", "garden_hard_surface",
+
+# Some gardens have different features within the same year
+# This isn't an issue for ivy, long grass or area of long grass as these can change within a year
+# But the size and direction of your garden shouldn't change - need to identify and remove these sites as the
+# info is not reliable 
+
+# First, find sites which have different feature values within a year
+# this removes any duplicates (within or across years) as these are not an issue
+garden_features2 <- garden_features[!duplicated(garden_features[,c("grid_reference", "garden_direction",
                                                                    "garden_ivy", "garden_long_grass", "garden_long_grass_area",
                                                                    "garden_size")]),]
-# issues with gardens within the same year have different features
-# not so much of an issue with e.g. area of long grass as could change through the year - take the mean?
-# but it's an issue where gardens have different sizes within one year
 
-duplicated_sites <- garden_features2 %>%
+# but this leaves sites that only have one year of records (which also aren't an issue)
+# so find gardens that have different feature values at least twice (either multiple records within or across years)
+incorrect_sites <- garden_features2 %>%
   group_by(grid_reference) %>% 
   filter(n() > 1) %>%
   ungroup() 
-length(unique(duplicated_sites$grid_reference)) # 57 out of 823 sites with duplicated values
+length(unique(incorrect_sites$grid_reference)) # 57 out of 823 sites with different feature values within or across years
+# Go through each site and decide whether the site needs to be removed or not (based on criteria L19-22)
 
 # NH520239 x 2: area long grass and garden size (within 2016) - EXCLUDE
 # NJ561196 x 2: area long grass (within 2017) - KEEP
@@ -60,7 +66,7 @@ length(unique(duplicated_sites$grid_reference)) # 57 out of 823 sites with dupli
 # ST6960849215 x 2: across years KEEP
 # ST739641 x 2: across years KEEP
 # SU131295 x 2: within year garden size EXCLUDE
-# SU3695501940 x 2: across years KEEP
+# SU3695501940 x 2: within years garden size EXCLUDE
 # SU4067314308 x 3: across and between long grass KEEP
 # SU4388654840 x 2: within years garden size EXCLUDE
 # SU743714 x 3: within years long grass KEEP (remove the row of zeros) 
@@ -88,12 +94,12 @@ length(unique(duplicated_sites$grid_reference)) # 57 out of 823 sites with dupli
 # TQ7028009690 x 2: across years KEEP
 # TR1380467079 x 2: within years ivy KEEP
 
-# REMOVE 11 SITES - these are ones that have different garden directions or sizes within a year - implausible 
+# REMOVE 12 SITES - these are ones that have different garden directions or sizes within a year - implausible 
 sites_exclude <- c("NH520239", "NO6119107748", "NZ226279", "SJ811843", "SK4945309892", "ST1405907628", "SU131295",
-                   "SU4388654840", "SU855492", "SX031531", "SX793451")
+                   "SU4388654840", "SU855492", "SX031531", "SX793451", "SU3695501940")
+garden_features <- garden_features[!garden_features$grid_reference %in% sites_exclude,] # remove these sites
+length(unique(garden_features$grid_reference)) # 811
 
-garden_features2 <- garden_features2[!garden_features2$grid_reference %in% sites_exclude,]
-length(unique(garden_features2$grid_reference)) # 812
 
 ## What are the categories for each column?
 
@@ -107,28 +113,28 @@ length(unique(garden_features2$grid_reference)) # 812
 # Checks to make on the remaining data:
 
 # 1. Which gardens have zeros in the columns? This is only possible for area of long grass (only if long grass == 2)
-colSums(garden_features2==0)
-# 24 in garden direction
-# 8 in hard surface
-# 9 in long grass
-# 430 long grass area (these are fine)
-# 8 in garden size
-# These gardens can be removed if and when I need to e.g. if using garden direction in a model,
-# remove the gardens that have zeros in garden direction
+colSums(garden_features==0) # garden direction, hard surface, ivy, garden long grasss and garden size have zeros
+
+# These gardens with zeros can be removed if and when I need to e.g. if using garden direction in a model,
+# remove the gardens that have zeros in garden direction (probably change to NAs)
+
 # Bigger issue is gardens that have all zeros - are these errors or do they have data for other dates?
-zeros <- garden_features2[rowSums(garden_features2[, 4:7,9]) == 0,]
+zeros <- unique(garden_features[rowSums(garden_features[, 4:6,8]) == 0,])
+length(unique(zeros$grid_reference))
 # 5 sites that have zeros for all columns (apart from area of long grass)
 # Do these sites have data on other dates?
-# SK626008 - yes same year (2016) just remove one row
+# SK626008 - yes same year (2016) just remove rows with zeros
 # SO9533919864 - no, remove site
 # SP7779565063 - no, remove site
-# SU743714 - yes same year (2016) just remove one row
-# TL888400 - yes but for different year - just remove for that year
-garden_features3 <- garden_features2[!rowSums(garden_features2[, 4:7,9]) == 0,] # removes 2 sites and 5 rows
-# make sure when I merge again, merge with year too
+# SU743714 - yes same year (2016) just remove rows with zeros
+# TL888400 - yes same year (2021) just remove rows with zeros
+sites_exclude2 <- c("SO9533919864", "SP7779565063")
+garden_features <- garden_features[!garden_features$grid_reference %in% sites_exclude2,] # removes 2 sites
+garden_features <- garden_features[!rowSums(garden_features[, 4:6,8]) == 0,] # rows with all zeros (but these sites have garden feature data for the same year)
+length(unique(garden_features$grid_reference)) # 809 sites
 
 # 2. Do Y/N for long grass and area all match up? 
-check <- garden_features3[,c("grid_reference", "year", "garden_long_grass", "garden_long_grass_area")]
+check <- unique(garden_features[,c("grid_reference", "year", "garden_long_grass", "garden_long_grass_area")])
 # These grid refs have said no long grass, but have put a positive value for area
 # NH562225
 # SN656896 
@@ -153,8 +159,6 @@ check <- garden_features3[,c("grid_reference", "year", "garden_long_grass", "gar
 # SZ799969
 # TL037084
 
-
-
 # 3. Does area of long grass and garden size match up?
 
 # Garden size 1 category is correct (all long grass <50)
@@ -170,37 +174,38 @@ check <- garden_features3[,c("grid_reference", "year", "garden_long_grass", "gar
 # SX817557 negative long grass area
 # SU174653 negative long grass area
 
-
+### These are all fixed below
 # Negative values in long grass area and zeros in all other columns get NAs
 # These can be removed easily if needed
-garden_features_final <- garden_features3 %>% 
-  mutate(across(c(garden_direction, garden_hard_surface, garden_ivy, garden_long_grass, garden_size), ~ na_if(., 0)))
-garden_features_final <- garden_features_final %>% mutate(garden_long_grass_area = replace(garden_long_grass_area, 
+garden_features <- garden_features %>% 
+  mutate(across(c(garden_direction, garden_ivy, garden_long_grass, garden_size), ~ na_if(., 0)))
+garden_features <- garden_features %>% mutate(garden_long_grass_area = replace(garden_long_grass_area, 
                                                                                            which(garden_long_grass_area<0), NA))
-length(unique(garden_features_final$grid_reference)) # 810
+length(unique(garden_features$grid_reference)) # 809
 
-# Put NAs where garden long grass == 2 and area is a positive value
-garden_features_final$garden_long_grass <- ifelse(garden_features_final$garden_long_grass==2 & garden_features_final$garden_long_grass_area>0, NA,
-                                                  garden_features_final$garden_long_grass)
-garden_features_final$garden_long_grass_area <- ifelse(garden_features_final$garden_long_grass==2 & garden_features_final$garden_long_grass_area>0, NA,
-                                                  garden_features_final$garden_long_grass_area)
+# Put NAs where garden long grass == 2 and area is a positive value (for area and presence as we don't know which is correct)
+garden_features$garden_long_grass <- ifelse(garden_features$garden_long_grass==2 & garden_features$garden_long_grass_area>0, NA,
+                                            garden_features$garden_long_grass)
+garden_features$garden_long_grass_area <- ifelse(garden_features$garden_long_grass==2 & garden_features$garden_long_grass_area>0, NA,
+                                                 garden_features$garden_long_grass_area)
 
 # Put NAs where garden long grass == 1 and area is zero
-garden_features_final$garden_long_grass <- ifelse(garden_features_final$garden_long_grass==1 & garden_features_final$garden_long_grass_area==0, NA,
-                                                  garden_features_final$garden_long_grass)
-garden_features_final$garden_long_grass_area <- ifelse(garden_features_final$garden_long_grass==1 & garden_features_final$garden_long_grass_area==0, NA,
-                                                       garden_features_final$garden_long_grass_area)
+garden_features$garden_long_grass <- ifelse(garden_features$garden_long_grass==1 & garden_features$garden_long_grass_area==0, NA,
+                                            garden_features$garden_long_grass)
+garden_features$garden_long_grass_area <- ifelse(garden_features$garden_long_grass==1 & garden_features$garden_long_grass_area==0, NA,
+                                                 garden_features$garden_long_grass_area)
 
 
 ## Take maximum value across duplicates of hard surface, area of long grass and take the yes of ivy if duplicated (which is the minimum)
-garden_features_final$date <- NULL
-garden_features_final2 <- garden_features_final %>% group_by(grid_reference, year) %>% summarise(garden_long_grass_area=max(garden_long_grass_area),
-                                                                                                 garden_hard_surface=max(garden_hard_surface),
+garden_features$date <- NULL
+garden_features <- garden_features %>% group_by(grid_reference, year) %>% summarise(garden_long_grass_area=max(garden_long_grass_area),
                                                                                                  garden_ivy=min(garden_ivy),
                                                                                                  garden_long_grass=min(garden_long_grass), across())
-garden_features_final2 <- unique(garden_features_final2)
-length(unique(garden_features_final2$grid_reference)) # 810
-duplicated_sites <- garden_features_final2 %>%
+length(unique(garden_features$grid_reference)) # 809
+garden_features2 <- garden_features[!duplicated(garden_features[,c("grid_reference", "garden_direction",
+                                                                   "garden_ivy", "garden_long_grass", "garden_long_grass_area",
+                                                                   "garden_size")]),]
+incorrect_sites2 <- garden_features2 %>%
   group_by(grid_reference, year) %>% 
   filter(n() > 1) %>%
   ungroup()  
@@ -208,20 +213,80 @@ duplicated_sites <- garden_features_final2 %>%
 # to a positive value for area and 1 (yes) within the same year
 # solve this by taking the min of garden long grass to change them to 1 (yes) 
 # We've already taken the maximum value of area so it needs to match up with a 1 
-# Duplicated_sites is now zero after this change
+# incorrect_sites2 is now zero after this change
 
-# Still issues with gardens that have said yes to long grass (1) but zero in area (nothing to do with duplications)
+garden_features <- unique(garden_features)
 
-
-summary(garden_features_final2)
-library(rnrfa)
-east_north <- as.data.frame(osg_parse(grid_refs=garden_features_final2$grid_reference))
-garden_features_final2 <- cbind(garden_features_final2, east_north)
-lon_lat <- as.data.frame(osg_parse(grid_refs=garden_features_final2$grid_reference, coord_system = "WGS84"))
-garden_features_final2 <- cbind(garden_features_final2, lon_lat)
-
-ggplot(garden_features_final2, aes(easting, northing))+
-  geom_point()+coord_fixed()
+# check how many sites if take out gardens with NAs
+garden_min <- na.omit(garden_features)
+length(unique(garden_min$grid_reference)) # 763 - not bad 
 
 ## save garden features
-write.csv(garden_features_final2, file="Data/Raw GBS data/GBS_garden_features_cleaned.csv", row.names=FALSE)
+write.csv(garden_features, file="Data/Raw GBS data/GBS_garden_features_cleaned.csv", row.names=FALSE)
+
+
+
+
+#########################################################################################################
+#########################################################################################################
+#########################################################################################################
+
+# Same script as above, but for sites included in the autumn ivy analysis
+# This is because the site filters are different
+
+# load data
+garden_features <- read.csv("Data/Raw GBS data/GBS_2016_2021_cleaned_filtered_ivy.csv", header=TRUE)
+
+# extract garden features only
+garden_features <- garden_features[,c("grid_reference", "date", "year", "garden_direction",
+                                      "garden_ivy", "garden_long_grass", "garden_long_grass_area",
+                                      "garden_size")]
+
+# Some gardens have different features within the same year
+# This isn't an issue for ivy, long grass or area of long grass as these can change within a year
+# But the size and direction of your garden shouldn't change - need to identify and remove these sites as the
+# info is not reliable 
+
+# First, find sites which have different feature values within a year
+# this removes any duplicates (within or across years) as these are not an issue
+garden_features2 <- garden_features[!duplicated(garden_features[,c("grid_reference", "garden_direction",
+                                                                   "garden_size")]),]
+
+# but this leaves sites that only have one year of records (which also aren't an issue)
+# so find gardens that have different feature values at least twice (either multiple records within or across years)
+incorrect_sites <- garden_features2 %>%
+  group_by(grid_reference) %>% 
+  filter(n() > 1) %>%
+  ungroup() 
+length(unique(incorrect_sites$grid_reference)) # 8 out of 753 sites with different size or direction within or across years
+# remove these sites
+
+sites_exclude <- unique(incorrect_sites$grid_reference)
+garden_features <- garden_features[!garden_features$grid_reference %in% sites_exclude,] # remove these sites
+length(unique(garden_features$grid_reference)) # 745
+
+# Change zeros and negative values to NAs
+garden_features <- garden_features %>% 
+  mutate(across(c(garden_direction, garden_ivy, garden_long_grass, garden_size), ~ na_if(., 0)))
+garden_features <- garden_features %>% mutate(garden_long_grass_area = replace(garden_long_grass_area, 
+                                                                               which(garden_long_grass_area<0), NA))
+
+## Take minimum (1=yes) of ivy and long grass and max of area when there are duplicates within years
+garden_features$date <- NULL
+garden_features <- garden_features %>% group_by(grid_reference, year) %>% summarise(garden_long_grass_area=max(garden_long_grass_area),
+                                                                                    garden_ivy=min(garden_ivy),
+                                                                                    garden_long_grass=min(garden_long_grass), across())
+length(unique(garden_features$grid_reference)) # 809
+garden_features2 <- garden_features[!duplicated(garden_features[,c("grid_reference", "garden_direction",
+                                                                   "garden_ivy", "garden_long_grass", "garden_long_grass_area",
+                                                                   "garden_size")]),]
+incorrect_sites2 <- garden_features2 %>%
+  group_by(grid_reference, year) %>% 
+  filter(n() > 1) %>%
+  ungroup()  
+# zero incorrect sites
+
+garden_features <- unique(garden_features)
+
+## save garden features
+write.csv(garden_features, file="Data/Raw GBS data/GBS_garden_features_cleaned_ivy.csv", row.names=FALSE)
