@@ -2,8 +2,11 @@
 .Rhistory
 .RData
 .Ruserdata
+*.gpkg
+*.gpkg-shm
+*.gpkg-wal
+*.txt
 *.Rproj
-*.csv
 *.zip
 *.7z
 *.xlsx
